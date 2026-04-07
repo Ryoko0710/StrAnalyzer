@@ -13,7 +13,7 @@ find_package(FairMQ REQUIRED)
 find_package(ROOT REQUIRED COMPONENTS RIO RHTTP Hist)
 find_package(Boost REQUIRED COMPONENTS iostreams thread program_options filesystem date_time regex)
 
-# Dependencies from FairMQ (This follows the pattern in NestdaqAnalyzer)
+# Dependencies from FairMQ
 if(FairMQ_FOUND)
   foreach(dep IN LISTS FairMQ_PACKAGE_DEPENDENCIES)
     if(FairMQ_${dep}_COMPONENTS)
@@ -49,8 +49,18 @@ include_directories(
 # ------------------------------------------------------------------------------
 # Executables
 # ------------------------------------------------------------------------------
-add_executable(StrOnlineAnalyzer src/StrOnlineAnalyzer.cxx)
-target_link_libraries(StrOnlineAnalyzer
+# 1. OnlineTFBuilder
+add_executable(OnlineTFBuilder src/OnlineTFBuilder.cxx)
+target_link_libraries(OnlineTFBuilder
+    FairMQ::FairMQ
+    FairLogger::FairLogger
+    ${ROOT_LIBRARIES}
+    ${Boost_LIBRARIES}
+)
+
+# 2. OnlineSlicer
+add_executable(OnlineSlicer src/OnlineSlicer.cxx)
+target_link_libraries(OnlineSlicer
     FairMQ::FairMQ
     FairLogger::FairLogger
     ${ROOT_LIBRARIES}
@@ -58,4 +68,4 @@ target_link_libraries(StrOnlineAnalyzer
 )
 
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/bin)
-install(TARGETS StrOnlineAnalyzer RUNTIME DESTINATION bin)
+install(TARGETS OnlineTFBuilder OnlineSlicer RUNTIME DESTINATION bin)
