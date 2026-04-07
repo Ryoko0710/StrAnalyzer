@@ -68,16 +68,45 @@ struct OnlineSlicerNode : fair::mq::Device
             LOG(info) << "THttpServer started on port 8889";
         }
 
-        fH1TrigInterval = new TH1F("h1_trig_interval", "Trigger Interval;Time [us];Counts", 1000, 0, 100);
-        fH1TrigTime     = new TH1F("h1_trig_time", "Trigger Time distribution;Time [s];Counts", 1000, 0, 1.0);
-        
-        if(fServer) {
-            fServer->Register("/Summary", fH1TrigInterval);
-            fServer->Register("/Summary", fH1TrigTime);
-            fServer->SetItemField("/", "_monitoring", "1000");
+        if (!fH1TrigInterval) {
+            fH1TrigInterval = new TH1F("h1_trig_interval", "Trigger Interval;Time [us];Counts", 1000, 0, 100);
+            fH1TrigTime     = new TH1F("h1_trig_time", "Trigger Time distribution;Time [s];Counts", 1000, 0, 1.0);
+            
+            if(fServer) {
+                fServer->Register("/Summary", fH1TrigInterval);
+                fServer->Register("/Summary", fH1TrigTime);
+                fServer->SetItemField("/", "_monitoring", "1000");
+                fServer->SetItemField("/Summary", "_monitoring", "1000");
+            }
+        } else {
+            fH1TrigInterval->Reset();
+            fH1TrigTime->Reset();
         }
 
         fDrawTimer.SetDuration(100); 
+    }
+
+    void PreRun() override
+    {
+        LOG(info) << "OnlineSlicerNode: PreRun - Resetting histograms for new run.";
+        ResetHistograms();
+    }
+
+    void ResetHistograms()
+    {
+        if (fH1TrigInterval) fH1TrigInterval->Reset();
+        if (fH1TrigTime)     fH1TrigTime->Reset();
+        for (auto& [id, h] : fMapHitPattern) {
+            if (h) h->Reset();
+        }
+        for (auto& [id, vec] : fMapTDC) {
+            for (auto* h : vec) if (h) h->Reset();
+        }
+        for (auto& [id, vec] : fMapTOT) {
+            for (auto* h : vec) if (h) h->Reset();
+        }
+        fLastTrgTime = 0;
+        LOG(info) << "OnlineSlicerNode: Histograms reset completed.";
     }
 
     int CheckAMANEQHeader(AmQStrTdc::Data::v1::Bits bits) {
@@ -143,11 +172,11 @@ struct OnlineSlicerNode : fair::mq::Device
                             if (current_ptr >= end_ptr) break;
                             Filter::v1::TrgTime tt;
                             std::memcpy(&tt, current_ptr, 8);
-                            uint64_t t_ps = static_cast<uint64_t>(tt.time) * 4000;
+                            uint64_t t_ps = static_cast<uint64_t>(tt.time) * 4096;
                             trg_times.push_back(t_ps);
                             
                             if (fLastTrgTime > 0) fH1TrigInterval->Fill((t_ps - fLastTrgTime) * 1e-6);
-                            fLastTrigTime = t_ps;
+                            fLastTrgTime = t_ps;
                             current_ptr++;
                         }
                     }
@@ -197,7 +226,7 @@ struct OnlineSlicerNode : fair::mq::Device
                                 if (current_trig > 0) {
                                     long long diff = (long long)hit_ps - (long long)current_trig;
                                     if (ch < fMapTDC[fem_id].size()) {
-                                        fMapTDC[fem_id][ch]->Fill(is_hr ? diff : diff / 1000.0);
+                                        fMapTDC[fem_id][ch]->Fill(is_hr ? diff : diff / 1024.0);
                                         fMapTOT[fem_id][ch]->Fill(tot);
                                     }
                                 }
@@ -237,7 +266,7 @@ struct OnlineSlicerNode : fair::mq::Device
 
         for (int i = 0; i < max_ch; ++i) {
             if (is_hr) {
-                fMapTDC[fem_id][i] = new TH1F(Form("h1_tdc_%s_ch%d", ip_str.c_str(), i), "Rel Time [ps]", 2000, -100000, 100000);
+                fMapTDC[fem_id][i] = new TH1F(Form("h1_tdc_%s_ch%d", ip_str.c_str(), i), "Rel Time [ps]", 2000, -1000000, 1000000);
                 fMapTOT[fem_id][i] = new TH1F(Form("h1_tot_%s_ch%d", ip_str.c_str(), i), "TOT", 1000, 0, 200000);
             } else {
                 fMapTDC[fem_id][i] = new TH1F(Form("h1_tdc_%s_ch%d", ip_str.c_str(), i), "Rel Time [ns]", 2000, -1000, 1000);
@@ -277,7 +306,7 @@ private:
     KTimer fDrawTimer;
     uint64_t fLastTrgTime = 0;
 
-    TH1F *fH1TrigInterval, *fH1TrigTime;
+    TH1F *fH1TrigInterval = nullptr, *fH1TrigTime = nullptr;
     std::map<uint32_t, TH1F*> fMapHitPattern;
     std::map<uint32_t, std::vector<TH1F*>> fMapTDC, fMapTOT;
     std::map<uint32_t, std::vector<TCanvas*>> fCanvases;

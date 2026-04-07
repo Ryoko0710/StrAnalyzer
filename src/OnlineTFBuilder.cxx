@@ -76,13 +76,40 @@ struct OnlineTFBuilderNode : fair::mq::Device
 
         fDrawTimer.SetDuration(100); 
 
-        fH2HitPattern = new TH2F("h2_hitpat", "Hit Pattern;Channel;FEM ID", 128, 0, 128, 10, 0, 10);
-        if(fServer) {
-            fServer->Register("/Summary", fH2HitPattern);
-            fServer->SetItemField("/", "_monitoring", "1000");
-            fServer->SetItemField("/Summary", "_monitoring", "1000");
+        // Create Summary histogram only if not already exists
+        if (!fH2HitPattern) {
+            fH2HitPattern = new TH2F("h2_hitpat", "Hit Pattern;Channel;FEM ID", 128, 0, 128, 10, 0, 10);
+            if(fServer) {
+                fServer->Register("/Summary", fH2HitPattern);
+                fServer->SetItemField("/", "_monitoring", "1000");
+                fServer->SetItemField("/Summary", "_monitoring", "1000");
+            }
+        } else {
+            fH2HitPattern->Reset();
         }
         LOG(info) << "OnlineTFBuilderNode: InitTask Finished.";
+    }
+
+    void PreRun() override
+    {
+        LOG(info) << "OnlineTFBuilderNode: PreRun - Resetting histograms for new run.";
+        ResetHistograms();
+    }
+
+    void ResetHistograms()
+    {
+        if (fH2HitPattern) fH2HitPattern->Reset();
+        for (auto& [id, h] : fMapHitPattern) {
+            if (h) h->Reset();
+        }
+        for (auto& [id, vec] : fMapTDC) {
+            for (auto* h : vec) if (h) h->Reset();
+        }
+        for (auto& [id, vec] : fMapTOT) {
+            for (auto* h : vec) if (h) h->Reset();
+        }
+        fProcessCount = 0;
+        LOG(info) << "OnlineTFBuilderNode: Histograms reset completed.";
     }
 
     int CheckAMANEQHeader(AmQStrTdc::Data::v1::Bits bits) {
@@ -329,9 +356,11 @@ struct OnlineTFBuilderNode : fair::mq::Device
         }
 
         fCanvases.push_back(c_tdc_1); fCanvases.push_back(c_tdc_2);
-        if(c_tdc_3) fCanvases.push_back(c_tdc_3); if(c_tdc_4) fCanvases.push_back(c_tdc_4);
+        if(c_tdc_3) { fCanvases.push_back(c_tdc_3); }
+        if(c_tdc_4) { fCanvases.push_back(c_tdc_4); }
         fCanvases.push_back(c_tot_1); fCanvases.push_back(c_tot_2);
-        if(c_tot_3) fCanvases.push_back(c_tot_3); if(c_tot_4) fCanvases.push_back(c_tot_4);
+        if(c_tot_3) { fCanvases.push_back(c_tot_3); }
+        if(c_tot_4) { fCanvases.push_back(c_tot_4); }
         
         for (int i = 0; i < 32; ++i) {
             c_tdc_1->cd(i+1); fMapTDC[fem_id][i]->Draw();
